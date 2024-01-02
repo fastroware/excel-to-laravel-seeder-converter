@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel to Laravel Seeder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #excelFile {
+      margin-bottom: 20px;
+    }
+
+    pre {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      overflow-x: auto;
+      max-height: 300px; /* Set the maximum height for the code box */
+      display: none; /* Initially hide the code */
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    label {
+      background-color: #3498db;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    label:hover {
+      background-color: #2980b9;
+    }
+
+    #copyButton {
+      margin-top: 10px;
+      background-color: #2ecc71;
+      color: #fff;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      display: none; /* Initially hide the copy button */
+    }
+
+    #copyButton:hover {
+      background-color: #27ae60;
+    }
+
+    #copiedButton {
+      margin-top: 10px;
+      background-color: #3498db;
+      color: #fff;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: not-allowed;
+      transition: background-color 0.3s ease;
+    }
+
+    #copiedButton:hover {
+      background-color: #2980b9;
+    }
+  </style>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+</head>
+<body>
+  <label for="excelFile">Choose Excel File</label>
+  <input type="file" id="excelFile" accept=".xlsx, .xls" onchange="handleFile()">
+  <button id="copyButton" onclick="copyToClipboard()">Copy Seeder Code</button>
+  <button id="copiedButton" style="display:none;">Copied!</button>
+  <pre id="output"></pre>
+
+  <script>
+    function handleFile() {
+      var input = document.getElementById('excelFile');
+      var file = input.files[0];
+
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var data = e.target.result;
+          var workbook = XLSX.read(data, { type: 'binary' });
+          var sheet_name_list = workbook.SheetNames;
+          var sheet = workbook.Sheets[sheet_name_list[0]];
+
+          // Get table name from A1 cell
+          var tableName = sheet['A1'].v;
+          var jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 2, blankrows: true });
+
+          // Generate Laravel Seeder code
+          var seederCode = generateSeederCode(tableName, jsonData);
+
+          // Display the generated code
+          var outputElement = document.getElementById('output');
+          outputElement.innerText = seederCode;
+          outputElement.style.display = 'block'; // Show the code
+
+          // Show the copy button
+          document.getElementById('copyButton').style.display = 'inline-block';
+        };
+
+        reader.readAsBinaryString(file);
+      }
+    }
+
+    function generateSeederCode(tableName, data) {
+      var seederCode = "$table_name = '" + tableName + "';\n\n";
+
+      for (var i = 0; i < data.length; i++) {
+        seederCode += "DB::table($table_name)->insert([\n";
+
+        for (var j = 0; j < data[i].length; j++) {
+          var columnName = data[0][j];
+          var cellData = data[i][j];
+
+          // Identify column type and handle empty cells
+          var columnValue = identifyColumnType(cellData, columnName);
+
+          seederCode += "  '" + columnName + "' => " + columnValue + ",\n";
+        }
+
+        // Add created_at and updated_at with current timestamp
+        seederCode += "  'updated_at' => Carbon::now(),\n";
+        seederCode += "  'created_at' => Carbon::now(),\n";
+
+        seederCode += "]);\n\n";
+      }
+
+      return seederCode;
+    }
+
+    function identifyColumnType(cellData, columnName) {
+      if (columnName.toLowerCase().includes('password')) {
+        // If the column name contains 'password', hash the value
+        return cellData ? "Hash::make('" + cellData + "')" : "null";
+      } else if (!isNaN(cellData)) {
+        // If the cell data is a number, treat it as an integer
+        return cellData !== undefined ? cellData : "null";
+      } else {
+        // If the cell data contains non-numeric characters, treat it as text
+        return cellData !== undefined ? "'" + cellData + "'" : "null";
+      }
+    }
+
+    function copyToClipboard() {
+      var outputElement = document.getElementById('output');
+      var copyButton = document.getElementById('copyButton');
+      var copiedButton = document.getElementById('copiedButton');
+
+      var textArea = document.createElement('textarea');
+      textArea.value = outputElement.innerText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      // Show the "Copied!" button and hide the "Copy Seeder Code" button
+      copiedButton.style.display = 'inline-block';
+      copyButton.style.display = 'none';
+
+      // Reset the buttons after 5 seconds
+      setTimeout(function() {
+        copiedButton.style.display = 'none';
+        copyButton.style.display = 'inline-block';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
+
